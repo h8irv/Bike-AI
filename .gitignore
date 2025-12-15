@@ -1,0 +1,14 @@
+# Data/models (DVC handles)
+data/
+models/
+results/large/
+.DVC files except .dvc/ .dvc.lock
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+# Env/large
+__pycache__/
+
+*.npy  # Large feats
+*.wav  # Processed/raw
+.venv/
