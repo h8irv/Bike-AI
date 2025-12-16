@@ -1,0 +1,10 @@
+{
+  "custom_cnn": {
+    "test_loss": 0.013847040943801403,
+    "test_accuracy": 0.9965397715568542
+  },
+  "transfer_learning": {
+    "test_loss": 0.011874144896864891,
+    "test_accuracy": 0.9982699155807495
+  }
+}
