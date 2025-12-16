@@ -1,54 +1,59 @@
+# Virtual Environment
+venv/
+env/
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-venv/
-env/
-ENV/
-.venv
-pip-log.txt
-pip-delete-this-directory.txt
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# Jupyter Notebooks
+.ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# Data
+# Data (too large for git)
+data/raw/*
 data/processed/*
-data/splits/*
+data/augmented/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/augmented/.gitkeep
 
-venv/
-src/
-
-# Models
-models/checkpoints/*
-models/trained/*
-models/optimized/*
+# Models (too large for git)
+models/*
 !models/.gitkeep
 
-# Results
-results/evaluations/*
-results/plots/*
-results/benchmarks/*
-results/logs/*
-!results/.gitkeep
+# Logs
+logs/*.log
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
-.DS_Store
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
+# Results (can be regenerated)
+results/figures/*
+results/metrics/*
+!results/figures/.gitkeep
+!results/metrics/.gitkeep
 
-# TensorBoard
-logs/
+# DVC
+/dvc.lock
+
+# MLflow
+mlruns/
+mlartifacts/
+.mlflow/
+
+# Temporary files
+*.tmp
+*.bak
+/logs
