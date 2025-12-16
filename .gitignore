@@ -1,5 +1,54 @@
-data/features/*
-data/spectrograms/*
-data/processed/*
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
 
-models/*
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+# Data
+data/processed/*
+data/splits/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+venv/
+src/
+
+# Models
+models/checkpoints/*
+models/trained/*
+models/optimized/*
+!models/.gitkeep
+
+# Results
+results/evaluations/*
+results/plots/*
+results/benchmarks/*
+results/logs/*
+!results/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# TensorBoard
+logs/

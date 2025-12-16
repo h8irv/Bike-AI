@@ -1,0 +1,66 @@
+# Hardware-Specific Configuration
+# =================================
+
+esp32s3:
+  # Memory constraints
+  sram_kb: 520
+  psram_mb: 8
+  flash_mb: 8
+  
+  # CPU
+  cpu_mhz: 240
+  cores: 2
+  
+  # TFLite Micro settings
+  tensor_arena_kb: 150
+  
+  # Audio capture
+  i2s_sample_rate: 16000
+  i2s_bits_per_sample: 16
+  i2s_dma_buf_count: 8
+  i2s_dma_buf_len: 512
+  
+  # Feature extraction on-device
+  feature_type: "log_mel"  # or "mfcc"
+  n_features: 40
+  frame_length_ms: 25
+  frame_step_ms: 10
+  
+  # Model constraints
+  max_model_size_kb: 800
+  max_inference_time_ms: 100
+
+rp2040:
+  # Memory constraints
+  sram_kb: 264
+  flash_mb: 2
+  
+  # CPU
+  cpu_mhz: 133
+  cores: 2
+  
+  # TFLite Micro settings
+  tensor_arena_kb: 100
+  
+  # Audio capture
+  i2s_sample_rate: 16000
+  i2s_bits_per_sample: 16
+  
+  # Feature extraction on-device
+  feature_type: "log_mel"
+  n_features: 32
+  frame_length_ms: 25
+  frame_step_ms: 10
+  
+  # Model constraints
+  max_model_size_kb: 400
+  max_inference_time_ms: 150
+
+pc_simulator:
+  # Simulate device constraints on PC
+  simulate_memory_limit: true
+  simulate_cpu_limit: true
+  simulate_latency: true
+  
+  # Target device to simulate
+  target_device: "esp32s3"  # or "rp2040"

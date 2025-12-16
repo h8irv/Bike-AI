@@ -1,0 +1,379 @@
+#!/usr/bin/env python3
+"""
+Data Preparation Script for Angle Grinder Detection System
+=============================================================
+
+Purpose: Organize raw audio files, create train/val/test splits, and generate manifests.
+
+Steps:
+1. Scan data/raw/{class}/ directories for audio files
+2. Create train/val/test splits based on config ratios
+3. Generate manifest files (train.txt, val.txt, test.txt) in data/splits/
+4. Validate dataset structure and class balance
+5. Log statistics to console and file
+
+Execution: python scripts/01_prepare_data.py
+"""
+
+import os
+import sys
+import yaml
+import random
+import logging
+import json
+from pathlib import Path
+from typing import Dict, List
+from collections import defaultdict
+from datetime import datetime
+
+# Configure logging
+LOG_DIR = Path("results/logs")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_DIR / f"data_prep_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+
+def load_config(config_path: str = "config/config.yaml") -> Dict:
+    """
+    Load configuration from YAML file.
+    
+    Args:
+        config_path: Path to config.yaml
+        
+    Returns:
+        Dictionary containing configuration
+    """
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        logger.info(f"Loaded config from {config_path}")
+        return config
+    except FileNotFoundError:
+        logger.error(f"Config file not found: {config_path}")
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        logger.error(f"Error parsing YAML: {e}")
+        sys.exit(1)
+
+
+def validate_config(config: Dict) -> bool:
+    """
+    Validate that required config keys exist.
+    
+    Args:
+        config: Configuration dictionary
+        
+    Returns:
+        True if valid, exits otherwise
+    """
+    # Check top-level structure
+    required_sections = ['config', 'preprocessing', 'training', 'inference']
+    missing_sections = [k for k in required_sections if k not in config]
+    
+    if missing_sections:
+        logger.error(f"Missing required config sections: {missing_sections}")
+        logger.info("Ensure your YAML has proper structure with 'config:' as top-level key")
+        sys.exit(1)
+    
+    # Validate data config
+    data_config = config.get('config', {})
+    required_data_keys = ['raw_dir', 'processed_dir', 'classes', 'train_split', 'val_split', 'test_split']
+    missing_keys = [k for k in required_data_keys if k not in data_config]
+    
+    if missing_keys:
+        logger.error(f"Missing data config keys: {missing_keys}")
+        sys.exit(1)
+    
+    # Validate splits sum to 1.0
+    splits_sum = (data_config['train_split'] + 
+                  data_config['val_split'] + 
+                  data_config['test_split'])
+    
+    if not (0.99 <= splits_sum <= 1.01):
+        logger.error(f"Train/Val/Test splits don't sum to 1.0: {splits_sum}")
+        sys.exit(1)
+    
+    logger.info("✓ Configuration validation passed")
+    return True
+
+
+def scan_audio_files(raw_dir: str, classes: List[str]) -> Dict[str, List[Path]]:
+    """
+    Scan raw_dir for audio files organized by class.
+    
+    Args:
+        raw_dir: Path to data/raw directory
+        classes: List of class names
+        
+    Returns:
+        Dictionary: {class_name: [list of audio file paths]}
+    """
+    audio_files = defaultdict(list)
+    supported_formats = {'.wav', '.mp3', '.flac', '.ogg'}
+    
+    raw_path = Path(raw_dir)
+    
+    if not raw_path.exists():
+        logger.error(f"Raw data directory not found: {raw_dir}")
+        sys.exit(1)
+    
+    for class_name in classes:
+        class_dir = raw_path / class_name
+        
+        if not class_dir.exists():
+            logger.warning(f"Class directory not found: {class_dir}")
+            continue
+        
+        audio_count = 0
+        for audio_file in class_dir.rglob("*"):
+            if audio_file.suffix.lower() in supported_formats:
+                audio_files[class_name].append(audio_file)
+                audio_count += 1
+        
+        logger.info(f"Found {audio_count} audio files for class '{class_name}'")
+    
+    if not audio_files:
+        logger.error("No audio files found in any class directory!")
+        sys.exit(1)
+    
+    return dict(audio_files)
+
+
+def create_splits(audio_files: Dict[str, List[Path]], 
+                  train_ratio: float, 
+                  val_ratio: float, 
+                  test_ratio: float,
+                  random_seed: int = 42) -> Dict[str, Dict[str, List[Path]]]:
+    """
+    Create stratified train/val/test splits per class.
+    
+    Args:
+        audio_files: Dictionary of class -> file paths
+        train_ratio: Training split ratio
+        val_ratio: Validation split ratio
+        test_ratio: Testing split ratio
+        random_seed: Seed for reproducibility
+        
+    Returns:
+        Dictionary: {split: {class: [file_paths]}}
+    """
+    random.seed(random_seed)
+    
+    splits = {'train': {}, 'val': {}, 'test': {}}
+    
+    for class_name, files in audio_files.items():
+        shuffled_files = files.copy()
+        random.shuffle(shuffled_files)
+        
+        total = len(shuffled_files)
+        train_end = int(total * train_ratio)
+        val_end = train_end + int(total * val_ratio)
+        
+        splits['train'][class_name] = shuffled_files[:train_end]
+        splits['val'][class_name] = shuffled_files[train_end:val_end]
+        splits['test'][class_name] = shuffled_files[val_end:]
+        
+        logger.info(
+            f"Class '{class_name}': "
+            f"train={len(splits['train'][class_name])}, "
+            f"val={len(splits['val'][class_name])}, "
+            f"test={len(splits['test'][class_name])}"
+        )
+    
+    return splits
+
+
+# at top of file
+import os
+from pathlib import Path
+
+# inside generate_manifests(...)
+def generate_manifests(splits: Dict[str, Dict[str, List[Path]]], splits_dir: str = "data/splits") -> None:
+    splits_path = Path(splits_dir)
+    splits_path.mkdir(parents=True, exist_ok=True)
+
+    # Derive project root from script location, not CWD
+    project_root = Path(__file__).resolve().parents[1]  # assumes scripts/ under project root
+
+    for split_name, class_files in splits.items():
+        manifest_file = splits_path / f"{split_name}.txt"
+        with open(manifest_file, 'w') as f:
+            for class_name, files in class_files.items():
+                for file_path in files:
+                    # Robust relative path computation
+                    rel = os.path.relpath(str(Path(file_path).resolve()), start=str(project_root))
+                    f.write(f"{rel},{class_name}\n")
+
+        
+        total_files = sum(len(files) for files in class_files.values())
+        logger.info(f"Generated {manifest_file} with {total_files} entries")
+
+
+def generate_statistics_report(audio_files: Dict[str, List[Path]], 
+                               splits: Dict[str, Dict[str, List[Path]]],
+                               config: Dict) -> None:
+    """
+    Generate and log detailed statistics about the dataset.
+    
+    Args:
+        audio_files: Original audio files dictionary
+        splits: Train/val/test splits
+        config: Configuration dictionary
+    """
+    stats = {
+        'timestamp': datetime.now().isoformat(),
+        'total_files': sum(len(files) for files in audio_files.values()),
+        'classes': {},
+        'splits': {}
+    }
+    
+    # Per-class statistics
+    for class_name, files in audio_files.items():
+        stats['classes'][class_name] = {
+            'total_files': len(files),
+            'percentage': f"{(len(files) / stats['total_files'] * 100):.1f}%"
+        }
+    
+    # Per-split statistics
+    for split_name, class_files in splits.items():
+        total_in_split = sum(len(files) for files in class_files.values())
+        stats['splits'][split_name] = {
+            'total_files': total_in_split,
+            'percentage': f"{(total_in_split / stats['total_files'] * 100):.1f}%",
+            'classes': {}
+        }
+        
+        for class_name, files in class_files.items():
+            stats['splits'][split_name]['classes'][class_name] = {
+                'files': len(files),
+                'percentage_of_split': f"{(len(files) / total_in_split * 100):.1f}%"
+            }
+    
+    # Add config details
+    stats['config'] = {
+        'raw_dir': config['config']['raw_dir'],
+        'sample_rate': config['config']['sample_rate'],
+        'duration': config['config']['duration'],
+        'train_split_ratio': config['config']['train_split'],
+        'val_split_ratio': config['config']['val_split'],
+        'test_split_ratio': config['config']['test_split']
+    }
+    
+    # Log to console
+    logger.info("\n" + "="*70)
+    logger.info("DATASET STATISTICS")
+    logger.info("="*70)
+    logger.info(f"Total files: {stats['total_files']}")
+    logger.info("\\nPer-Class Distribution:")
+    for class_name, class_stats in stats['classes'].items():
+        logger.info(f"  {class_name}: {class_stats['total_files']} files ({class_stats['percentage']})")
+    
+    logger.info("\\nTrain/Val/Test Split Distribution:")
+    for split_name, split_stats in stats['splits'].items():
+        logger.info(f"\\n  {split_name.upper()} ({split_stats['percentage']})")
+        for class_name, class_info in split_stats['classes'].items():
+            logger.info(f"    {class_name}: {class_info['files']} files ({class_info['percentage_of_split']})")
+    
+    logger.info("="*70 + "\n")
+    
+    # Save to JSON
+    stats_file = LOG_DIR / f"dataset_stats_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    with open(stats_file, 'w') as f:
+        json.dump(stats, f, indent=2)
+    logger.info(f"Saved detailed statistics to {stats_file}")
+
+
+def verify_dataset_integrity(splits: Dict[str, Dict[str, List[Path]]]) -> bool:
+    """
+    Verify dataset integrity: files exist, no duplicates, balanced classes.
+    
+    Args:
+        splits: Train/val/test splits
+        
+    Returns:
+        True if all checks pass
+    """
+    logger.info("\nVerifying dataset integrity...")
+    
+    all_files = set()
+    duplicates_found = False
+    
+    for split_name, class_files in splits.items():
+        for class_name, files in class_files.items():
+            for file_path in files:
+                if not file_path.exists():
+                    logger.error(f"File not found: {file_path}")
+                    return False
+                
+                if str(file_path) in all_files:
+                    logger.error(f"Duplicate file across splits: {file_path}")
+                    duplicates_found = True
+                
+                all_files.add(str(file_path))
+    
+    if duplicates_found:
+        return False
+    
+    logger.info("✓ All files exist and no duplicates found")
+    return True
+
+
+def main():
+    """Main execution function."""
+    logger.info("="*70)
+    logger.info("ANGLE GRINDER DETECTION - DATA PREPARATION")
+    logger.info("="*70)
+    
+    # Load and validate config
+    config = load_config("config/config.yaml")
+    validate_config(config)
+    
+    # Extract config values
+    data_config = config['config']
+    raw_dir = data_config['raw_dir']
+    classes = data_config['classes']
+    train_ratio = data_config['train_split']
+    val_ratio = data_config['val_split']
+    test_ratio = data_config['test_split']
+    
+    logger.info(f"Configuration:")
+    logger.info(f"  Raw data directory: {raw_dir}")
+    logger.info(f"  Classes: {classes}")
+    logger.info(f"  Split ratios - Train: {train_ratio}, Val: {val_ratio}, Test: {test_ratio}")
+    
+    # Scan audio files
+    logger.info("\nScanning raw audio files...")
+    audio_files = scan_audio_files(raw_dir, classes)
+    
+    # Create splits
+    logger.info("\nCreating train/val/test splits...")
+    splits = create_splits(audio_files, train_ratio, val_ratio, test_ratio)
+    
+    # Generate manifests
+    logger.info("\nGenerating manifest files...")
+    generate_manifests(splits)
+    
+    # Generate statistics
+    logger.info("\nGenerating dataset statistics...")
+    generate_statistics_report(audio_files, splits, config)
+    
+    # Verify integrity
+    if not verify_dataset_integrity(splits):
+        logger.error("Dataset integrity check failed!")
+        sys.exit(1)
+    
+    logger.info("✓ Data preparation completed successfully!")
+    logger.info(f"✓ Manifest files saved to data/splits/")
+    logger.info(f"✓ Logs saved to {LOG_DIR}")
+
+
+if __name__ == "__main__":
+    main()

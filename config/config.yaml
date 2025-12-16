@@ -1,0 +1,161 @@
+# Angle Grinder Detector Configuration
+# =====================================
+
+config:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  sample_rate: 16000
+  duration: 1.0
+  overlap: 0.5
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  classes:
+    - angle_grinder
+    - background_noise
+    - power_tools
+
+preprocessing:
+  universal:
+    normalize_method: "peak"
+    highpass_cutoff: 80
+  classical:
+    n_mfcc: 20
+    n_fft: 512
+    hop_length: 160
+    win_length: 400
+    include_spectral: true
+    include_temporal: true
+    include_chroma: true
+  neural:
+    n_mels: 40
+    n_mfcc: 13
+    n_fft: 512
+    hop_length: 160
+    win_length: 400
+    include_deltas: true
+    include_delta_deltas: false
+  augmentation:
+    enabled: false
+    gaussian_noise:
+      enabled: true
+      prob: 0.5
+      min_amplitude: 0.001
+      max_amplitude: 0.015
+    time_stretch:
+      enabled: true
+      prob: 0.3
+      min_rate: 0.8
+      max_rate: 1.2
+    pitch_shift:
+      enabled: true
+      prob: 0.3
+      min_semitones: -2
+      max_semitones: 2
+    time_shift:
+      enabled: true
+      prob: 0.5
+      min_fraction: -0.3
+      max_fraction: 0.3
+    gain:
+      enabled: true
+      prob: 0.3
+      min_gain_db: -6
+      max_gain_db: 6
+
+training:
+  batch_size: 32
+  epochs: 100
+  learning_rate: 0.001
+  early_stopping_patience: 15
+  reduce_lr_patience: 10
+  reduce_lr_factor: 0.5
+  classical:
+    svm:
+      kernel: ["rbf"]          
+      C: [0.1, 1, 10]
+      gamma: ["scale", "auto"]
+    random_forest:
+      n_estimators: [50, 100, 200]
+      max_depth: [10, 20, 30, null]
+      min_samples_split: [2, 5, 10]
+    xgboost:
+      n_estimators: [50, 100, 200]
+      max_depth: [3, 6, 9]
+      learning_rate: [0.01, 0.1, 0.3]
+
+  neural:
+    teacher_cnn:
+      conv_blocks: 4
+      filters: [32, 64, 128, 256]
+      kernel_size: [3, 3, 3, 3]
+      pool_size: [2, 2, 2, 2]
+      dropout: 0.5
+      dense_units: [128, 64]
+    student_cnn:
+      conv_blocks: 2
+      filters: [16, 32]
+      kernel_size: [3, 3]
+      pool_size: [2, 2]
+      dropout: 0.3
+      dense_units: [64]
+  distillation:
+    enabled: true
+    alpha: 0.1
+    temperature: 3
+  transfer_learning:
+    mobilenet:
+      freeze_layers: 100
+      fine_tune_layers: 20
+    yamnet:
+      freeze_layers: "all"
+      fine_tune_layers: 10
+
+optimization:
+  quantization:
+    method: "int8"
+    representative_dataset_size: 100
+  pruning:
+    enabled: false
+    target_sparsity: 0.5
+  micromlgen:
+    use_sklearn_optimized: true
+
+evaluation:
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1_score
+    - roc_auc
+    - confusion_matrix
+  cv_folds: 5
+  plot_confusion_matrix: true
+  plot_roc_curves: true
+  plot_training_history: true
+  plot_feature_importance: true
+
+inference:
+  input_sources:
+    - file
+    - microphone
+    - simulation
+  temporal_smoothing: true
+  smoothing_window: 5
+  confidence_threshold: 0.7
+  log_predictions: true
+  log_latency: true
+  log_confidence: true
+  vibration:
+    enabled: false
+    threshold: 0.5
+    require_both: false
+
+hardware:
+  esp32s3:
+    sram_kb: 520
+    psram_mb: 8
+    cpu_mhz: 240
+  rp2040:
+    sram_kb: 264
+    cpu_mhz: 133
