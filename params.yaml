@@ -1,0 +1,221 @@
+# Angle Grinder Detection - Configuration Parameters
+# Edit these values to customize your pipeline
+
+# ============================================================================
+# DATA AUGMENTATION
+# ============================================================================
+augmentation:
+  grinder_multiplier: 11         # Multiply grinder samples by 25 (~36 → ~900)
+  tools_multiplier: 9             # Multiply tool samples by 20
+  background_multiplier: 1         # No augmentation for background (already diverse)
+  
+  # Noise addition (SNR in dB)
+  noise_snr_min: 12                # Minimum signal-to-noise ratio
+  noise_snr_max: 18                # Maximum signal-to-noise ratio
+  
+  # Time stretching (playback speed while maintaining pitch)
+  time_stretch_min: 0.85           # 0.85x speed (slower)
+  time_stretch_max: 1.15           # 1.15x speed (faster)
+  
+  # Pitch shifting (semitones)
+  pitch_shift_min: -3              # Down 3 semitones
+  pitch_shift_max: 3               # Up 3 semitones
+  
+  # Gain adjustment (dB)
+  gain_min: -4                     # Quieter by 4 dB
+  gain_max: 4                      # Louder by 4 dB
+
+# ============================================================================
+# PREPROCESSING
+# ============================================================================
+preprocessing:
+  target_sr: 16000                 # Changed from 16000
+  segment_duration: 1.0            # Keep at 1 second
+  segment_overlap: 0.5             # Keep at 50%
+  hop_length: 8000                # Changed from 8000 (0.5s at 44.1kHz)
+  window_size: 16000              # Changed from 16000 (1s at 44.1kHz)
+
+  
+  # High-pass filter (remove low frequency rumble)
+  highpass_cutoff: 80              # Cutoff frequency in Hz
+  highpass_order: 5                # Filter order (steepness)
+  
+  # Normalization
+  norm_method: 'peak'              # Normalization method ('peak' or 'rms')
+  peak_level: 0.89                 # Target peak level (-1 dB to avoid clipping)
+
+# ============================================================================
+# FEATURE EXTRACTION - CLASSICAL ML
+# ============================================================================
+features_classical:
+  # MFCC (Mel-Frequency Cepstral Coefficients)
+  n_mfcc: 13                       # Number of MFCC coefficients
+  n_fft: 512                       # FFT window size
+  hop_length: 160                  # Samples between frames (10ms at 16kHz)
+  
+  # Spectral features
+  spectral_rolloff_percent: 0.85   # Frequency below which 85% of energy is contained
+  spectral_contrast_bands: 6       # Number of frequency bands (produces 7 bands total)
+  
+  # GFCC (Gammatone Frequency Cepstral Coefficients) using spafe
+  gfcc_n_filters: 100              # Number of gammatone filters
+  gfcc_fmin: 50                    # Minimum frequency
+  gfcc_fmax: 8000                  # Maximum frequency
+  gfcc_n_coeffs: 13                # Number of GFCC coefficients
+  
+  # Feature sets to extract
+  feature_sets:
+    - mfcc                         # MFCC-only baseline (~194 features)
+    - gfcc                         # GFCC-only (~194 features)
+    - combined                     # All features combined (~300 features)
+
+# ============================================================================
+# FEATURE EXTRACTION - NEURAL NETWORKS
+# ============================================================================
+features_neural:
+  n_fft: 512                       # FFT window size
+  hop_length: 160                  # Samples between frames
+  n_mels: 40                       # Number of mel frequency bands
+  n_channels: 3                    # 1: log-mel only, 3: log-mel + delta + delta-delta
+
+# ============================================================================
+# DATA SPLITTING
+# ============================================================================
+data_split:
+  train_ratio: 0.70                # 70% for training
+  val_ratio: 0.15                  # 15% for validation
+  test_ratio: 0.15                 # 15% for testing
+  stratify: true                   # Maintain class balance across splits
+  random_state: 42                 # Random seed for reproducibility
+  split_by_file: true              # Split at file level to prevent data leakage
+
+# ============================================================================
+# CLASS BALANCING
+# ============================================================================
+balancing:
+  method: 'hybrid'                 # 'hybrid', 'oversample', 'undersample', 'none'
+  undersample_ratio: 0.8           # Reduce non-grinder to 0.8:1 ratio before ADASYN
+  oversample_ratio: 1.0            # ADASYN to achieve 1:1 final ratio
+  apply_to: 'train'                # Only balance training set
+
+# ============================================================================
+# CLASSICAL ML - HYPERPARAMETER SEARCH SPACES
+# ============================================================================
+classical_ml:
+  # Support Vector Machine
+  svm:
+    C: [0.1, 1, 10, 100]           # Regularization parameter
+    gamma: ['scale', 'auto', 0.001, 0.01]  # Kernel coefficient
+    kernel: ['rbf']                # Kernel type
+  
+  # Random Forest
+  random_forest:
+    n_estimators: [50, 100, 200]   # Number of trees
+    max_depth: [10, 20, 30, null]  # Maximum tree depth (null = no limit)
+    min_samples_split: [2, 5, 10]  # Minimum samples to split node
+    max_features: ['sqrt', 'log2'] # Features to consider per split
+  
+  # XGBoost
+  xgboost:
+    learning_rate: [0.01, 0.05, 0.1]         # Step size shrinkage
+    max_depth: [3, 5, 7, 9]                  # Maximum tree depth
+    n_estimators: [100, 200, 300]            # Number of boosting rounds
+    min_child_weight: [1, 3, 5]              # Minimum sum of weights in child
+    subsample: [0.8, 0.9, 1.0]               # Subsample ratio of training data
+    colsample_bytree: [0.8, 0.9, 1.0]        # Subsample ratio of features
+  
+  # K-Nearest Neighbors
+  knn:
+    n_neighbors: [3, 5, 7, 11, 15, 21]       # Number of neighbors
+    weights: ['uniform', 'distance']         # Weight function
+    metric: ['euclidean', 'manhattan']       # Distance metric
+  
+  # Gaussian Mixture Model
+  gmm:
+    n_components: [2, 4, 6, 8]               # Number of mixture components
+    covariance_type: ['full', 'diag']        # Covariance matrix type
+
+# ============================================================================
+# NEURAL NETWORKS
+# ============================================================================
+neural:
+  # Custom CNN
+  cnn:
+    batch_size: 64                 # Samples per batch
+    epochs: 30                     # Maximum training epochs
+    learning_rate: 0.001           # Initial learning rate
+    dropout_rate: 0.5              # Dropout for regularization
+    early_stopping_patience: 5     # Epochs without improvement before stopping
+    reduce_lr_patience: 3          # Epochs before reducing learning rate
+    reduce_lr_factor: 0.5          # Factor to reduce learning rate
+  
+  # YAMNet Transfer Learning
+  yamnet:
+    batch_size: 128                # Larger batch size for transfer learning
+    epochs: 15                     # Fewer epochs needed
+    learning_rate: 0.001           # Initial learning rate for head
+    head_units: [128, 64]          # Dense layer sizes in classification head
+    dropout_rates: [0.4, 0.3]      # Dropout for each dense layer
+    early_stopping_patience: 3     # Fewer epochs needed
+    
+    # Fine-tuning settings
+    finetune_learning_rate: 0.0001 # 10x slower for fine-tuning
+    finetune_layers: 4             # Number of YAMNet layers to unfreeze
+  
+  # Knowledge Distillation
+  distillation:
+    temperature: 4                 # Softening factor for teacher predictions
+    alpha: 0.7                     # Weight for soft loss (vs hard loss)
+    epochs: 20                     # Distillation training epochs
+
+# ============================================================================
+# OPTIMIZATION
+# ============================================================================
+optimization:
+  n_selected_features: 62          # Number of features after selection
+  imputation_estimators: 50        # Trees in imputation forest
+  imputation_max_depth: 10         # Max depth for imputation trees
+  
+  # Reduced spectrogram resolution (for deployment)
+  reduced_spec:
+    n_fft: 256                     # Smaller FFT window
+    hop_length: 320                # Larger hop (fewer frames)
+    n_mels: 20                     # Fewer mel bands
+
+# ============================================================================
+# MLFLOW
+# ============================================================================
+mlflow:
+  experiment_name: 'angle_grinder_pipeline'  # MLflow experiment name
+  tracking_uri: './mlruns'                   # Local tracking directory
+  autolog: true                              # Auto-log parameters and metrics
+
+# ============================================================================
+# DVC
+# ============================================================================
+dvc:
+  remote: 'local_storage'          # Default remote name
+  autostage: true                  # Automatically stage DVC files with Git
+
+# ============================================================================
+# EVALUATION
+# ============================================================================
+evaluation:
+  metrics: ['accuracy', 'precision', 'recall', 'f1', 'roc_auc']  # Metrics to compute
+  cv_folds: 5                      # Number of cross-validation folds
+  conf_matrix: true                # Generate confusion matrices
+  roc_curve: true                  # Generate ROC curves
+  
+# ============================================================================
+# PATHS (relative to project root)
+# ============================================================================
+paths:
+  data_raw: 'data/raw'
+  data_processed: 'data/processed'
+  data_features_classical: 'data/features/classical'
+  data_features_neural: 'data/features/neural'
+  models_classical: 'models/classical'
+  models_neural: 'models/neural'
+  models_quantized: 'models/quantized'
+  results: 'results'
+  logs: 'logs'
