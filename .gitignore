@@ -14,7 +14,6 @@ __pycache__/
 *.ipynb_checkpoints
 
 # Data (too large for git)
-data/raw/*
 data/processed/*
 data/augmented/*
 !data/raw/.gitkeep
